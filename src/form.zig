@@ -10,7 +10,7 @@ const string = []const u8;
 const WS = " \t\r\n";
 const CRLF = "\r\n";
 
-const AprilError = error{ MultipartBoundaryTooLong, MultipartFinalBoundaryMissing, PartNotFound };
+const AprilError = error{ MultipartBoundaryTooLong, MultipartFinalBoundaryMissing, PartNotFound, MultipartFormDataMissingHeaders, ContentDispoitionNotFormData };
 
 pub const File = struct {
     const Self = @This();
@@ -60,7 +60,7 @@ pub fn getField(name: string, content_type: string, data: string) !File {
         const eoh = mem.lastIndexOf(u8, part, headers_sep);
         if (eoh == null) {
             log.warn("multipart/form-data missing headers: {s}", .{part});
-            continue;
+            return AprilError.MultipartFormDataMissingHeaders;
         }
 
         var headers = part[0 .. eoh.? + headers_sep.len];
@@ -76,6 +76,7 @@ pub fn getField(name: string, content_type: string, data: string) !File {
         const content_disp = iter.next().?;
         if (!mem.eql(u8, content_disp, "form-data")) {
             log.warn("Content-Disposition is not form-data: {s}", .{content_disp});
+            return AprilError.ContentDispoitionNotFormData;
         }
 
         while (iter.next()) |param| {

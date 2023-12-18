@@ -9,12 +9,13 @@ const mem = std.mem;
 const fs = std.fs;
 
 const log = std.log.scoped(.server);
+const Allocator = mem.Allocator;
 const string = []const u8;
 
 const Options = struct {
     host: string,
     port: u16,
-    allocator: mem.Allocator,
+    allocator: Allocator,
 };
 
 pub fn run(options: Options) !void {
@@ -34,7 +35,7 @@ pub fn run(options: Options) !void {
             response.wait() catch |err| switch (err) {
                 error.HttpHeadersInvalid => continue,
                 error.EndOfStream => continue,
-                else => return err,
+                else => {},
             };
 
             try handleRequest(&response, options.allocator);
@@ -42,7 +43,7 @@ pub fn run(options: Options) !void {
     }
 }
 
-pub fn handleRequest(response: *http.Server.Response, allocator: mem.Allocator) !void {
+pub fn handleRequest(response: *http.Server.Response, allocator: Allocator) !void {
     const body = try response.reader().readAllAlloc(allocator, std.math.maxInt(usize));
     defer allocator.free(body);
 
@@ -51,21 +52,30 @@ pub fn handleRequest(response: *http.Server.Response, allocator: mem.Allocator) 
     }
 
     if (std.mem.eql(u8, response.request.target, "/")) {
-        if (response.request.method != .POST) {
+        if (response.request.method == .GET or response.request.method == .HEAD) {
             response.status = .ok;
+            if (response.request.method != .HEAD) {
+                response.transfer_encoding = .{ .content_length = 8 };
+            }
             try response.headers.append("content-type", "text/plain");
             try response.send();
             if (response.request.method != .HEAD) {
-                response.transfer_encoding = .{ .content_length = 8 };
                 try response.writeAll("poke :3\n");
             }
             try response.finish();
             logRequest(response);
             return;
-        } else {
-            // TODO: actually upload
+        } else if (response.request.method == .POST) {
             // TODO: check for a token and validate before uploading
-            const content_type = response.request.headers.getFirstEntry("Content-Type").?.value;
+            const content_type_header = response.request.headers.getFirstEntry("content-type");
+
+            if (content_type_header == null) {
+                log.warn("attempted to upload without a file", .{});
+                return;
+            }
+
+            const content_type = content_type_header.?.value;
+
             const uploaded_file = try form.getField("file", content_type, body);
 
             const hash = try hasher.hash(allocator, uploaded_file.data);
@@ -92,9 +102,7 @@ pub fn handleRequest(response: *http.Server.Response, allocator: mem.Allocator) 
             logRequest(response);
             return;
         }
-    }
-
-    if (response.request.method == .GET or response.request.method == .HEAD) {
+    } else if (response.request.method == .GET or response.request.method == .HEAD) {
         const path = try std.fmt.allocPrint(allocator, "uploads/{s}", .{cleanPath(response.request.target)});
         defer allocator.free(path);
         const file = fs.cwd().openFile(path, .{}) catch |err| {
@@ -124,6 +132,7 @@ pub fn handleRequest(response: *http.Server.Response, allocator: mem.Allocator) 
 
         if (mime_type == null) {
             log.warn("unrecognized file extension: {s}", .{ext});
+            return;
         }
 
         try response.headers.append("content-type", mime_type.?);
@@ -151,7 +160,7 @@ fn logRequest(response: *http.Server.Response) void {
     log.info("\x1b[32m{d} {s} \x1b[35m{s} {s} {s}\x1b[0m", .{
         @intFromEnum(response.status),
         response.status.phrase().?,
-        @tagName(response.request.method),
+        &mem.toBytes(response.request.method),
         response.request.target,
         @tagName(response.request.version),
     });
