@@ -19,6 +19,7 @@ pub fn main() !void {
     try mimes.init(allocator);
     defer mimes.deinit(allocator);
 
+    // TODO: use a config.json for address, port and eventually token
     const args = try std.process.argsAlloc(allocator);
     defer std.process.argsFree(allocator, args);
 
@@ -28,14 +29,14 @@ pub fn main() !void {
         return AprilError.ArgsMismatch;
     }
 
-    const host = args[1];
+    const address = args[1];
     const port = std.fmt.parseUnsigned(u16, args[2], 10) catch |err| {
         log.err("parsing port: {}", .{err});
         printUsage(args);
         return err;
     };
 
-    server.run(.{ .host = host, .port = port, .allocator = allocator }) catch |err| {
+    server.run(.{ .address = address, .port = port, .allocator = allocator }) catch |err| {
         log.err("server error: {}\n", .{err});
         if (@errorReturnTrace()) |trace| {
             std.debug.dumpStackTrace(trace.*);
@@ -47,4 +48,8 @@ pub fn main() !void {
 fn printUsage(args: Args) void {
     const stdout = std.io.getStdOut().writer();
     stdout.print("Usage: {s} <host> <port>\n", .{args[0]}) catch {};
+}
+
+test {
+    std.testing.refAllDecls(@This());
 }

@@ -13,7 +13,7 @@ const Allocator = mem.Allocator;
 const string = []const u8;
 
 const Options = struct {
-    host: string,
+    address: string,
     port: u16,
     allocator: Allocator,
 };
@@ -22,9 +22,9 @@ pub fn run(options: Options) !void {
     var server = http.Server.init(options.allocator, .{ .reuse_address = true });
     defer server.deinit();
 
-    const address = try net.Address.parseIp(options.host, options.port);
+    const address = try net.Address.parseIp(options.address, options.port);
     try server.listen(address);
-    log.info("Server is running at {s}:{d}", .{ options.host, options.port });
+    log.info("Server is running at {s}:{d}", .{ options.address, options.port });
     while (true) {
         var response = try server.accept(.{
             .allocator = options.allocator,
@@ -132,10 +132,9 @@ pub fn handleRequest(response: *http.Server.Response, allocator: Allocator) !voi
 
         if (mime_type == null) {
             log.warn("unrecognized file extension: {s}", .{ext});
-            return;
+        } else {
+            try response.headers.append("content-type", mime_type.?);
         }
-
-        try response.headers.append("content-type", mime_type.?);
 
         try response.send();
 
