@@ -33,8 +33,7 @@ pub fn run(options: Options) !void {
 
         if (response.reset() != .closing) {
             response.wait() catch |err| switch (err) {
-                error.HttpHeadersInvalid => continue,
-                error.EndOfStream => continue,
+                error.HttpHeadersInvalid, error.EndOfStream => continue,
                 else => {},
             };
 
@@ -44,36 +43,42 @@ pub fn run(options: Options) !void {
 }
 
 pub fn handleRequest(response: *http.Server.Response, allocator: Allocator) !void {
+    const req = response.request;
     const body = try response.reader().readAllAlloc(allocator, std.math.maxInt(usize));
     defer allocator.free(body);
 
-    if (response.request.headers.contains("connection")) {
-        try response.headers.append("connection", "keep-alive");
+    if (req.headers.getFirstEntry("Connection")) |connection| {
+        if (std.mem.eql(u8, connection.value, "keep-alive")) {
+            try response.headers.append("Connection", "keep-alive");
+        } else {
+            try response.headers.append("Connection", "close");
+        }
     }
 
-    if (std.mem.eql(u8, response.request.target, "/")) {
-        if (response.request.method == .GET or response.request.method == .HEAD) {
+    if (std.mem.eql(u8, req.target, "/")) {
+        if (req.method == .GET or req.method == .HEAD) {
             response.status = .ok;
-            if (response.request.method != .HEAD) {
-                response.transfer_encoding = .{ .content_length = 8 };
-            }
-            try response.headers.append("content-type", "text/plain");
+
+            response.transfer_encoding = .{ .content_length = 8 };
+
+            try response.headers.append("Content-Type", "text/plain");
             try response.send();
-            if (response.request.method != .HEAD) {
+
+            if (req.method != .HEAD) {
                 try response.writeAll("poke :3\n");
             }
+
             try response.finish();
             logRequest(response);
-            return;
-        } else if (response.request.method == .POST) {
-            // TODO: check for a token and validate before uploading
-            const content_type_header = response.request.headers.getFirstEntry("content-type");
 
+            return;
+        } else if (req.method == .POST) {
+            // TODO: check for a token and validate before uploading
+            const content_type_header = req.headers.getFirstEntry("content-type");
             if (content_type_header == null) {
                 log.warn("attempted to upload without a file", .{});
                 return;
             }
-
             const content_type = content_type_header.?.value;
 
             const uploaded_file = try form.getField("file", content_type, body);
@@ -81,11 +86,12 @@ pub fn handleRequest(response: *http.Server.Response, allocator: Allocator) !voi
             const hash = try hasher.hash(allocator, uploaded_file.data);
             defer allocator.free(hash);
 
-            const ext = fs.path.extension(uploaded_file.name);
             const uploads_path = try fs.cwd().realpathAlloc(allocator, "./uploads");
             defer allocator.free(uploads_path);
-            const file_name = try std.fmt.allocPrint(allocator, "{s}{s}", .{ hash, ext });
+
+            const file_name = try std.fmt.allocPrint(allocator, "{s}{s}", .{ hash, fs.path.extension(uploaded_file.name) });
             defer allocator.free(file_name);
+
             const file_path = try std.fmt.allocPrint(allocator, "{s}/{s}", .{ uploads_path, file_name });
             defer allocator.free(file_path);
 
@@ -96,62 +102,68 @@ pub fn handleRequest(response: *http.Server.Response, allocator: Allocator) !voi
             response.status = .ok;
             response.transfer_encoding = .{ .content_length = file_name.len };
             try response.send();
+
             try response.writeAll(file_name);
             try response.finish();
-
             logRequest(response);
+
             return;
         }
-    } else if (response.request.method == .GET or response.request.method == .HEAD) {
-        const path = try std.fmt.allocPrint(allocator, "uploads/{s}", .{cleanPath(response.request.target)});
+    } else if (req.method == .GET or req.method == .HEAD) {
+        const path = try std.fmt.allocPrint(allocator, "uploads/{s}", .{cleanPath(req.target)});
         defer allocator.free(path);
+
         const file = fs.cwd().openFile(path, .{}) catch |err| {
             switch (err) {
                 error.FileNotFound, error.IsDir => {
                     response.status = .not_found;
-                    try response.headers.append("content-type", "text/plain");
+                    response.transfer_encoding = .{ .content_length = 17 };
+                    try response.headers.append("Content-Type", "text/plain");
                     try response.send();
-                    if (response.request.method != .HEAD) {
-                        response.transfer_encoding = .{ .content_length = 17 };
+
+                    if (req.method != .HEAD) {
                         try response.writeAll("error: not found\n");
-                        try response.finish();
                     }
+
+                    try response.finish();
                     logRequest(response);
+
                     return;
                 },
                 else => return err,
             }
         };
         defer file.close();
+        const md = try file.metadata();
 
         response.status = .ok;
-        response.transfer_encoding = .chunked;
+        response.transfer_encoding = .{ .content_length = md.size() };
 
         const ext = fs.path.extension(path);
-        const mime_type = mimes.lookup(ext[1..]);
-
-        if (mime_type == null) {
-            log.warn("unrecognized file extension: {s}", .{ext});
+        const mime_type = mimes.lookup(mem.trimLeft(u8, ext, "."));
+        if (mime_type) |mime| {
+            try response.headers.append("Content-Type", mime);
         } else {
-            try response.headers.append("content-type", mime_type.?);
+            log.warn("unrecognized file extension: {s}", .{ext});
         }
 
         try response.send();
 
         var buf: [4096]u8 = undefined;
-
-        while (true) {
-            const read = try file.reader().read(&buf);
-            if (read == 0) {
-                break;
+        if (req.method != .HEAD) {
+            while (true) {
+                const read = try file.reader().read(&buf);
+                if (read == 0) {
+                    break;
+                }
+                _ = try response.write(buf[0..read]);
             }
-            _ = try response.write(buf[0..read]);
         }
 
         try response.finish();
     }
-
     logRequest(response);
+
     return;
 }
 
