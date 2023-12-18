@@ -23,12 +23,14 @@ pub fn main() !void {
     defer std.process.argsFree(allocator, args);
 
     if (args.len != 3) {
+        log.err("arguments mismatched", .{});
         printUsage(args);
         return AprilError.ArgsMismatch;
     }
 
     const host = args[1];
     const port = std.fmt.parseUnsigned(u16, args[2], 10) catch |err| {
+        log.err("parsing port: {}", .{err});
         printUsage(args);
         return err;
     };
@@ -43,6 +45,6 @@ pub fn main() !void {
 }
 
 fn printUsage(args: Args) void {
-    const out = std.io.getStdOut().writer();
-    out.print("Usage: {s} <host> <port>\n", .{args[0]}) catch {};
+    const stdout = std.io.getStdOut().writer();
+    stdout.print("Usage: {s} <host> <port>\n", .{args[0]}) catch {};
 }

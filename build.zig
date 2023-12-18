@@ -2,13 +2,17 @@ const std = @import("std");
 
 pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
-    const optimize = b.standardOptimizeOption(.{});
+    const release = b.option(bool, "release", "whether to build the bin in ReleaseSafe mode") orelse false;
+    var mode = b.option(std.builtin.Mode, "mode", "optimization mode to build the bin") orelse .Debug;
+    if (release) {
+        mode = std.builtin.Mode.ReleaseSafe;
+    }
     const exe = b.addExecutable(.{
         .name = "april",
 
         .root_source_file = .{ .path = "src/main.zig" },
         .target = target,
-        .optimize = optimize,
+        .optimize = mode,
     });
     b.installArtifact(exe);
 
@@ -23,7 +27,7 @@ pub fn build(b: *std.Build) void {
     const unit_tests = b.addTest(.{
         .root_source_file = .{ .path = "src/main.zig" },
         .target = target,
-        .optimize = optimize,
+        .optimize = mode,
     });
     const run_unit_tests = b.addRunArtifact(unit_tests);
     const test_step = b.step("test", "Run unit tests");

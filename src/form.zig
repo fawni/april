@@ -129,8 +129,7 @@ test getField {
         "--------------------------NYwnjKIWPWEnWtSMopADWj--\r\n";
     const file = try getField("file", content_type, body);
 
-    const expected = "nya";
-    const actual = file.data;
-
-    try std.testing.expectEqualStrings(expected, actual);
+    try std.testing.expectEqualStrings("important.txt", file.name);
+    try std.testing.expectEqualStrings("application/octet-stream", file.content_type);
+    try std.testing.expectEqualStrings("nya", file.data);
 }
