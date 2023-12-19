@@ -64,6 +64,11 @@ pub fn getField(name: string, content_type: string, data: string) !File {
         }
 
         var headers = part[0 .. eoh.? + headers_sep.len];
+
+        if (!std.mem.containsAtLeast(u8, headers, 1, "Content-Type")) {
+            continue;
+        }
+
         const value = part[headers.len..part.len];
 
         headers = headers[0 .. headers.len - 2];

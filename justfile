@@ -7,6 +7,10 @@ _default:
     @just --list
 
 # build april in release (ReleaseSafe) mode
+dev:
+    @zig build run -- {{address}} {{port}}
+
+# build april in release (ReleaseSafe) mode
 build:
     zig build -Drelease
 

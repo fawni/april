@@ -37,14 +37,16 @@ pub fn run(options: Options) !void {
                 else => {},
             };
 
-            try handleRequest(&response, options.allocator);
+            try handleRequest(options.allocator, &response);
         }
     }
 }
 
-pub fn handleRequest(response: *http.Server.Response, allocator: Allocator) !void {
+pub fn handleRequest(allocator: Allocator, response: *http.Server.Response) !void {
     const req = response.request;
     const body = try response.reader().readAllAlloc(allocator, std.math.maxInt(usize));
+    // var body: [8192]u8 = undefined;
+    // _ = try response.reader().readAll(&body);
     defer allocator.free(body);
 
     if (req.headers.getFirstEntry("Connection")) |connection| {
@@ -81,7 +83,36 @@ pub fn handleRequest(response: *http.Server.Response, allocator: Allocator) !voi
             }
             const content_type = content_type_header.?.value;
 
-            const uploaded_file = try form.getField("file", content_type, body);
+            const uploaded_file = form.getField("file", content_type, body) catch |err| {
+                response.status = .bad_request;
+
+                var message: string = undefined;
+                switch (err) {
+                    error.PartNotFound => {
+                        message = "No file with the paramater name 'file' supplied.";
+                        response.status = .not_found;
+                    },
+                    error.MultipartBoundaryTooLong => message = "Multipart boundary is too long.",
+                    error.MultipartFinalBoundaryMissing => message = "Multipart final boundary is missing.",
+                    error.MultipartFormDataMissingHeaders => message = "Multipart form data is missing headers",
+                    error.ContentDispoitionNotFormData => message = "Content-Disposition is not 'form-data'.",
+                    else => message = try std.fmt.allocPrint(allocator, "{}", .{err}),
+                }
+                log.warn("error while uploading a file: {s}", .{message});
+
+                response.transfer_encoding = .{ .content_length = message.len };
+                try response.headers.append("Content-Type", "text/plain");
+                try response.send();
+
+                if (req.method != .HEAD) {
+                    try response.writeAll(message);
+                }
+
+                try response.finish();
+                logRequest(response);
+
+                return;
+            };
 
             const hash = try hasher.hash(allocator, uploaded_file.data);
             defer allocator.free(hash);
