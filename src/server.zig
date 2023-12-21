@@ -15,6 +15,7 @@ const string = []const u8;
 const Options = struct {
     address: string,
     port: u16,
+    token: string,
     allocator: Allocator,
 };
 
@@ -24,7 +25,6 @@ pub fn run(options: Options) !void {
 
     const address = try net.Address.parseIp(options.address, options.port);
     try server.listen(address);
-    log.info("Server is running at {s}:{d}", .{ options.address, options.port });
     while (true) {
         var response = try server.accept(.{
             .allocator = options.allocator,
@@ -37,12 +37,12 @@ pub fn run(options: Options) !void {
                 else => {},
             };
 
-            try handleRequest(options.allocator, &response);
+            try handleRequest(options.allocator, &response, options.token);
         }
     }
 }
 
-pub fn handleRequest(allocator: Allocator, response: *http.Server.Response) !void {
+pub fn handleRequest(allocator: Allocator, response: *http.Server.Response, token: string) !void {
     const req = response.request;
     const body = try response.reader().readAllAlloc(allocator, std.math.maxInt(usize));
     // var body: [8192]u8 = undefined;
@@ -59,38 +59,29 @@ pub fn handleRequest(allocator: Allocator, response: *http.Server.Response) !voi
 
     if (std.mem.eql(u8, req.target, "/")) {
         if (req.method == .GET or req.method == .HEAD) {
-            response.status = .ok;
-
-            response.transfer_encoding = .{ .content_length = 8 };
-
-            try response.headers.append("Content-Type", "text/plain");
-            try response.send();
-
-            if (req.method != .HEAD) {
-                try response.writeAll("poke :3\n");
-            }
-
-            try response.finish();
-            logRequest(response);
-
-            return;
+            return try send(response, "poke :3", .ok);
         } else if (req.method == .POST) {
-            // TODO: check for a token and validate before uploading
+            if (req.headers.getFirstEntry("Authorization")) |auth| {
+                if (!std.mem.eql(u8, auth.value, token)) {
+                    log.warn("Invalid token used: {s}", .{auth.value});
+
+                    return try send(response, "Invalid token", .forbidden);
+                }
+            } else return try send(response, "No token provided", .forbidden);
+
             const content_type_header = req.headers.getFirstEntry("content-type");
             if (content_type_header == null) {
-                log.warn("attempted to upload without a file", .{});
-                return;
+                return log.warn("attempted to upload without a file", .{});
             }
             const content_type = content_type_header.?.value;
 
-            const uploaded_file = form.getField("file", content_type, body) catch |err| {
-                response.status = .bad_request;
-
+            const uploaded_file = form.getFirstField("file", content_type, body) catch |err| {
+                var status: http.Status = .bad_request;
                 var message: string = undefined;
                 switch (err) {
                     error.PartNotFound => {
                         message = "No file with the paramater name 'file' supplied.";
-                        response.status = .not_found;
+                        status = .not_found;
                     },
                     error.MultipartBoundaryTooLong => message = "Multipart boundary is too long.",
                     error.MultipartFinalBoundaryMissing => message = "Multipart final boundary is missing.",
@@ -100,18 +91,7 @@ pub fn handleRequest(allocator: Allocator, response: *http.Server.Response) !voi
                 }
                 log.warn("error while uploading a file: {s}", .{message});
 
-                response.transfer_encoding = .{ .content_length = message.len };
-                try response.headers.append("Content-Type", "text/plain");
-                try response.send();
-
-                if (req.method != .HEAD) {
-                    try response.writeAll(message);
-                }
-
-                try response.finish();
-                logRequest(response);
-
-                return;
+                return try send(response, message, status);
             };
 
             const hash = try hasher.hash(allocator, uploaded_file.data);
@@ -130,15 +110,7 @@ pub fn handleRequest(allocator: Allocator, response: *http.Server.Response) !voi
             defer file.close();
             try file.writeAll(uploaded_file.data);
 
-            response.status = .ok;
-            response.transfer_encoding = .{ .content_length = file_name.len };
-            try response.send();
-
-            try response.writeAll(file_name);
-            try response.finish();
-            logRequest(response);
-
-            return;
+            return try send(response, file_name, .ok);
         }
     } else if (req.method == .GET or req.method == .HEAD) {
         const path = try std.fmt.allocPrint(allocator, "uploads/{s}", .{cleanPath(req.target)});
@@ -146,21 +118,7 @@ pub fn handleRequest(allocator: Allocator, response: *http.Server.Response) !voi
 
         const file = fs.cwd().openFile(path, .{}) catch |err| {
             switch (err) {
-                error.FileNotFound, error.IsDir => {
-                    response.status = .not_found;
-                    response.transfer_encoding = .{ .content_length = 17 };
-                    try response.headers.append("Content-Type", "text/plain");
-                    try response.send();
-
-                    if (req.method != .HEAD) {
-                        try response.writeAll("error: not found\n");
-                    }
-
-                    try response.finish();
-                    logRequest(response);
-
-                    return;
-                },
+                error.FileNotFound, error.IsDir => return try send(response, "error: not found", .not_found),
                 else => return err,
             }
         };
@@ -193,9 +151,23 @@ pub fn handleRequest(allocator: Allocator, response: *http.Server.Response) !voi
 
         try response.finish();
     }
-    logRequest(response);
 
-    return;
+    return logRequest(response);
+}
+
+fn send(response: *http.Server.Response, msg: string, status: http.Status) !void {
+    response.status = status;
+    response.transfer_encoding = .{ .content_length = msg.len + 1 };
+    try response.headers.append("Content-Type", "text/plain");
+    try response.send();
+
+    if (response.request.method != .HEAD) {
+        try response.writeAll(msg);
+        try response.writeAll("\n");
+    }
+
+    try response.finish();
+    logRequest(response);
 }
 
 fn logRequest(response: *http.Server.Response) void {

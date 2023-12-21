@@ -15,7 +15,9 @@ pub fn main() !void {
     defer mimes.deinit(allocator);
 
     const cfg = try config.read(allocator);
-    server.run(.{ .address = cfg.address, .port = cfg.port, .allocator = allocator }) catch |err| {
+
+    log.info("Server is running at {s}:\x1b[1;36m{d}\x1b[0m", .{ cfg.address, cfg.port });
+    server.run(.{ .address = cfg.address, .port = cfg.port, .token = cfg.token, .allocator = allocator }) catch |err| {
         log.err("server error: {}\n", .{err});
         if (@errorReturnTrace()) |trace| {
             std.debug.dumpStackTrace(trace.*);

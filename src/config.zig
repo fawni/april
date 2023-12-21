@@ -2,7 +2,7 @@ const std = @import("std");
 
 const string = []const u8;
 
-const Config = struct { address: string, port: u16 };
+const Config = struct { address: string, port: u16, token: string };
 
 pub fn read(allocator: std.mem.Allocator) !Config {
     const file = try std.fs.cwd().readFileAlloc(allocator, "config.json", 4096);

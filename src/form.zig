@@ -10,7 +10,7 @@ const string = []const u8;
 const WS = " \t\r\n";
 const CRLF = "\r\n";
 
-const AprilError = error{ MultipartBoundaryTooLong, MultipartFinalBoundaryMissing, PartNotFound, MultipartFormDataMissingHeaders, ContentDispoitionNotFormData };
+const FormError = error{ MultipartBoundaryTooLong, MultipartFinalBoundaryMissing, PartNotFound, MultipartFormDataMissingHeaders, ContentDispoitionNotFormData };
 
 pub const File = struct {
     const Self = @This();
@@ -28,7 +28,7 @@ pub const File = struct {
     }
 };
 
-pub fn getField(name: string, content_type: string, data: string) !File {
+pub fn getFirstField(name: string, content_type: string, data: string) !File {
     var file = File.default();
 
     const boundary = getBoundary(content_type).?;
@@ -37,7 +37,7 @@ pub fn getField(name: string, content_type: string, data: string) !File {
         bounds = boundary[1 .. bounds.len - 1];
     }
     if (bounds.len > 70) {
-        return AprilError.MultipartBoundaryTooLong;
+        return FormError.MultipartBoundaryTooLong;
     }
 
     var buf: [74]u8 = undefined;
@@ -45,7 +45,7 @@ pub fn getField(name: string, content_type: string, data: string) !File {
     const final_boundary_index = mem.lastIndexOf(u8, data, final_boundary);
     if (final_boundary_index == null) {
         log.warn("Invalid multipart/form-data: no final boundary", .{});
-        return AprilError.MultipartFinalBoundaryMissing;
+        return FormError.MultipartFinalBoundaryMissing;
     }
 
     const separator = try std.fmt.bufPrint(&buf, "--{s}\r\n", .{bounds});
@@ -60,7 +60,7 @@ pub fn getField(name: string, content_type: string, data: string) !File {
         const eoh = mem.lastIndexOf(u8, part, headers_sep);
         if (eoh == null) {
             log.warn("multipart/form-data missing headers: {s}", .{part});
-            return AprilError.MultipartFormDataMissingHeaders;
+            return FormError.MultipartFormDataMissingHeaders;
         }
 
         var headers = part[0 .. eoh.? + headers_sep.len];
@@ -81,7 +81,7 @@ pub fn getField(name: string, content_type: string, data: string) !File {
         const content_disp = iter.next().?;
         if (!mem.eql(u8, content_disp, "form-data")) {
             log.warn("Content-Disposition is not form-data: {s}", .{content_disp});
-            return AprilError.ContentDispoitionNotFormData;
+            return FormError.ContentDispoitionNotFormData;
         }
 
         while (iter.next()) |param| {
@@ -107,7 +107,7 @@ pub fn getField(name: string, content_type: string, data: string) !File {
 
         return file;
     }
-    return AprilError.PartNotFound;
+    return FormError.PartNotFound;
 }
 
 fn getBoundary(content_type: string) ?string {
@@ -123,7 +123,7 @@ fn getBoundary(content_type: string) ?string {
     return null;
 }
 
-test getField {
+test getFirstField {
     const content_type = "multipart/form-data; boundary=------------------------NYwnjKIWPWEnWtSMopADWj";
     const body =
         "--------------------------NYwnjKIWPWEnWtSMopADWj\r\n" ++
@@ -132,7 +132,7 @@ test getField {
         "\r\n" ++
         "nya\r\n" ++
         "--------------------------NYwnjKIWPWEnWtSMopADWj--\r\n";
-    const file = try getField("file", content_type, body);
+    const file = try getFirstField("file", content_type, body);
 
     try std.testing.expectEqualStrings("important.txt", file.name);
     try std.testing.expectEqualStrings("application/octet-stream", file.content_type);
