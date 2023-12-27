@@ -17,12 +17,10 @@ pub const File = struct {
 
     name: string,
     data: string,
-    content_type: string,
 
     fn default() Self {
         return Self{
             .name = "",
-            .content_type = "",
             .data = "",
         };
     }
@@ -100,9 +98,6 @@ pub fn getFirstField(name: string, content_type: string, data: string) !File {
             }
         }
 
-        const content_type_key = "Content-Type: ";
-        const file_content_type = headers[disp_header.len + CRLF.len + content_type_key.len .. headers.len - CRLF.len];
-        file.content_type = file_content_type;
         file.data = mem.trimRight(u8, value, CRLF);
 
         return file;
@@ -135,6 +130,5 @@ test getFirstField {
     const file = try getFirstField("file", content_type, body);
 
     try std.testing.expectEqualStrings("important.txt", file.name);
-    try std.testing.expectEqualStrings("application/octet-stream", file.content_type);
     try std.testing.expectEqualStrings("nya", file.data);
 }

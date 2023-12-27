@@ -1,5 +1,5 @@
 const std = @import("std");
-const form = @import("form.zig");
+const multipart = @import("multipart.zig");
 const hasher = @import("hash.zig");
 const mimes = @import("mimes.zig");
 
@@ -75,7 +75,7 @@ pub fn handleRequest(allocator: Allocator, response: *http.Server.Response, toke
             }
             const content_type = content_type_header.?.value;
 
-            const uploaded_file = form.getFirstField("file", content_type, body) catch |err| {
+            const uploaded_file = multipart.getFirstField("file", content_type, body) catch |err| {
                 var status: http.Status = .bad_request;
                 var message: string = undefined;
                 switch (err) {
