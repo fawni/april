@@ -3,7 +3,7 @@ set windows-shell := ["pwsh.exe", "-NoLogo", "-Command"]
 _default:
     @just --list
 
-# build april in release (ReleaseSafe) mode
+# build april in debug mode
 @dev:
     zig build
     ./zig-out/bin/april

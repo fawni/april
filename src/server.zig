@@ -57,15 +57,16 @@ pub fn handleRequest(allocator: Allocator, response: *http.Server.Response, toke
 
     if (std.mem.eql(u8, req.target, "/")) {
         if (req.method == .GET or req.method == .HEAD) {
-            return try send(response, "poke :3", .ok);
+            // return try reply(response, "poke :3", .ok);
+            return try home(response);
         } else if (req.method == .POST) {
             if (req.headers.getFirstEntry("Authorization")) |auth| {
                 if (!std.mem.eql(u8, auth.value, token)) {
                     log.warn("Invalid token used: {s}", .{auth.value});
 
-                    return try send(response, "Invalid token", .forbidden);
+                    return try reply(response, "Invalid token", .forbidden);
                 }
-            } else return try send(response, "No token provided", .forbidden);
+            } else return try reply(response, "No token provided", .forbidden);
 
             const content_type_header = req.headers.getFirstEntry("content-type");
             if (content_type_header == null) {
@@ -89,7 +90,7 @@ pub fn handleRequest(allocator: Allocator, response: *http.Server.Response, toke
                 }
                 log.warn("error while uploading a file: {s}", .{message});
 
-                return try send(response, message, status);
+                return try reply(response, message, status);
             };
 
             const hash = try hasher.hash(allocator, uploaded_file.data);
@@ -108,7 +109,7 @@ pub fn handleRequest(allocator: Allocator, response: *http.Server.Response, toke
             defer file.close();
             try file.writeAll(uploaded_file.data);
 
-            return try send(response, file_name, .ok);
+            return try reply(response, file_name, .ok);
         }
     } else if (req.method == .GET or req.method == .HEAD) {
         const path = try std.fmt.allocPrint(allocator, "uploads/{s}", .{cleanPath(req.target)});
@@ -116,7 +117,7 @@ pub fn handleRequest(allocator: Allocator, response: *http.Server.Response, toke
 
         const file = fs.cwd().openFile(path, .{}) catch |err| {
             switch (err) {
-                error.FileNotFound, error.IsDir => return try send(response, "error: not found", .not_found),
+                error.FileNotFound, error.IsDir => return try reply(response, "error: not found", .not_found),
                 else => return err,
             }
         };
@@ -153,15 +154,107 @@ pub fn handleRequest(allocator: Allocator, response: *http.Server.Response, toke
     return logRequest(response);
 }
 
-fn send(response: *http.Server.Response, msg: string, status: http.Status) !void {
+fn home(response: *http.Server.Response) !void {
+    const html =
+        \\  <!DOCTYPE html>
+        \\  <html>
+        \\  <head>
+        \\      <title>~april</title>
+        \\
+        \\      <link rel="preconnect" href="https://fonts.googleapis.com">
+        \\      <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        \\      <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono&display=swap" rel="stylesheet">
+        \\
+        \\      <style>
+        \\          * {
+        \\              font-family: "JetBrains Mono", monospace;
+        \\          }
+        \\
+        \\          body {
+        \\              background-color: #151515;
+        \\              color: #d8d0d5;
+        \\              font-size: 11pt;
+        \\              line-height: 1.65em;
+        \\              max-width: 38em;
+        \\              padding-top: 3em;
+        \\              margin: auto;
+        \\          }
+        \\
+        \\          h1 {
+        \\              font-size: 2.35em;
+        \\          }
+        \\
+        \\          input {
+        \\              margin-bottom: 10px;
+        \\          }
+        \\
+        \\          button[type="submit"] {
+        \\              background-color: #202020;
+        \\              color: #d8d0d5;
+        \\              border: solid 1px #d8d0d5;
+        \\              border-radius: 8px;
+        \\              padding: 0.3em 1em 0.3em 1em;
+        \\          }
+        \\      </style>
+        \\  </head>
+        \\
+        \\  <body>
+        \\      <h1>~april</h1>
+        \\      <form id="upload-form" enctype="multipart/form-data">
+        \\          <label for="file">File:</label>
+        \\          <br/>
+        \\          <input id="file" type="file"/>
+        \\          <br/>
+        \\          <label for="token">Token:</label>
+        \\          <br/>
+        \\          <input id="token" type="password">
+        \\          <br/>
+        \\          <button type="submit">Upload</button>
+        \\      </form>
+        \\      <script>
+        \\          const form = document.getElementById("upload-form");
+        \\          const formData = new FormData();
+        \\
+        \\          const handleSubmit = async (event) => {
+        \\              event.preventDefault();
+        \\
+        \\              const token = document.getElementById("token").value;
+        \\              const file = document.getElementById("file").files.item(0);
+        \\
+        \\              formData.append("file", file);
+        \\
+        \\              let res = await fetch("/", {
+        \\                  method: "POST",
+        \\                  body: formData,
+        \\                  headers: {
+        \\                      "Authorization": token,
+        \\                  },
+        \\              }).catch((e) => console.error("error uploading file", e));
+        \\
+        \\              window.location.href = "/" + await res.text();
+        \\          };
+        \\
+        \\          form.addEventListener("submit", handleSubmit);
+        \\      </script>
+        \\  </body>
+        \\  </html>
+    ;
+
+    try send(response, html, .ok, "text/html");
+}
+
+fn reply(response: *http.Server.Response, msg: string, status: http.Status) !void {
+    try send(response, msg, status, "text/plain");
+}
+
+fn send(response: *http.Server.Response, msg: string, status: http.Status, content_type: string) !void {
     response.status = status;
-    response.transfer_encoding = .{ .content_length = msg.len + 1 };
-    try response.headers.append("Content-Type", "text/plain");
+    response.transfer_encoding = .{ .content_length = msg.len };
+    try response.headers.append("Content-Type", content_type);
     try response.do();
 
     if (response.request.method != .HEAD) {
         try response.writeAll(msg);
-        try response.writeAll("\n");
     }
 
     try response.finish();
