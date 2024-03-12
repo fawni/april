@@ -20,6 +20,11 @@ _default:
 @test:
     zig build test -Drelease
 
+# build april and install to ~/.local/bin
+[unix]
+@install: (build)
+    cp ./zig-out/bin/april ~/.local/bin
+
 push:
     git push
     git push gh
