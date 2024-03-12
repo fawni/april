@@ -19,3 +19,8 @@ _default:
 # build and test april
 @test:
     zig build test -Drelease
+
+push:
+    git push
+    git push gh
+    git push srht
