@@ -45,8 +45,6 @@ pub fn run(options: Options) !void {
 pub fn handleRequest(allocator: Allocator, response: *http.Server.Response, token: string) !void {
     const req = response.request;
     const body = try response.reader().readAllAlloc(allocator, std.math.maxInt(usize));
-    // var body: [8192]u8 = undefined;
-    // _ = try response.reader().readAll(&body);
     defer allocator.free(body);
 
     if (req.headers.getFirstEntry("Connection")) |connection| {
@@ -136,7 +134,7 @@ pub fn handleRequest(allocator: Allocator, response: *http.Server.Response, toke
             log.warn("unrecognized file extension: {s}", .{ext});
         }
 
-        try response.send();
+        try response.do();
 
         var buf: [4096]u8 = undefined;
         if (req.method != .HEAD) {
@@ -159,7 +157,7 @@ fn send(response: *http.Server.Response, msg: string, status: http.Status) !void
     response.status = status;
     response.transfer_encoding = .{ .content_length = msg.len + 1 };
     try response.headers.append("Content-Type", "text/plain");
-    try response.send();
+    try response.do();
 
     if (response.request.method != .HEAD) {
         try response.writeAll(msg);
