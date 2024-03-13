@@ -199,7 +199,7 @@ fn home(response: *http.Server.Response) !void {
         \\  </head>
         \\
         \\  <body>
-        \\      <h1>~april</h1>
+        \\      <h1><span style="color: #d895ee;">~</span>april</h1>
         \\      <form id="upload-form" enctype="multipart/form-data">
         \\          <label for="file">File:</label>
         \\          <br/>
