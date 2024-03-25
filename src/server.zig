@@ -7,6 +7,7 @@ const http = std.http;
 const net = std.net;
 const mem = std.mem;
 const fs = std.fs;
+const fmt = std.fmt;
 
 const log = std.log.scoped(.server);
 const Allocator = mem.Allocator;
@@ -48,20 +49,20 @@ pub fn handleRequest(allocator: Allocator, response: *http.Server.Response, toke
     defer allocator.free(body);
 
     if (req.headers.getFirstEntry("Connection")) |connection| {
-        if (std.mem.eql(u8, connection.value, "keep-alive")) {
+        if (mem.eql(u8, connection.value, "keep-alive")) {
             try response.headers.append("Connection", "keep-alive");
         } else {
             try response.headers.append("Connection", "close");
         }
     }
 
-    if (std.mem.eql(u8, req.target, "/")) {
+    if (mem.eql(u8, req.target, "/")) {
         if (req.method == .GET or req.method == .HEAD) {
             // return try reply(response, "poke :3", .ok);
             return try home(response);
         } else if (req.method == .POST) {
             if (req.headers.getFirstEntry("Authorization")) |auth| {
-                if (!std.mem.eql(u8, auth.value, token)) {
+                if (!mem.eql(u8, auth.value, token)) {
                     log.warn("Invalid token used: {s}", .{auth.value});
 
                     return try reply(response, "Invalid token", .forbidden);
@@ -86,7 +87,7 @@ pub fn handleRequest(allocator: Allocator, response: *http.Server.Response, toke
                     error.MultipartFinalBoundaryMissing => message = "Multipart final boundary is missing.",
                     error.MultipartFormDataMissingHeaders => message = "Multipart form data is missing headers",
                     error.ContentDispoitionNotFormData => message = "Content-Disposition is not 'form-data'.",
-                    else => message = try std.fmt.allocPrint(allocator, "{}", .{err}),
+                    else => message = try fmt.allocPrint(allocator, "{}", .{err}),
                 }
                 log.warn("error while uploading a file: {s}", .{message});
 
@@ -99,10 +100,10 @@ pub fn handleRequest(allocator: Allocator, response: *http.Server.Response, toke
             const uploads_path = try fs.cwd().realpathAlloc(allocator, "./uploads");
             defer allocator.free(uploads_path);
 
-            const file_name = try std.fmt.allocPrint(allocator, "{s}{s}", .{ hash, fs.path.extension(uploaded_file.name) });
+            const file_name = try fmt.allocPrint(allocator, "{s}{s}", .{ hash, fs.path.extension(uploaded_file.name) });
             defer allocator.free(file_name);
 
-            const file_path = try std.fmt.allocPrint(allocator, "{s}/{s}", .{ uploads_path, file_name });
+            const file_path = try fmt.allocPrint(allocator, "{s}/{s}", .{ uploads_path, file_name });
             defer allocator.free(file_path);
 
             const file = try fs.createFileAbsolute(file_path, .{ .read = true, .truncate = true });
@@ -112,7 +113,7 @@ pub fn handleRequest(allocator: Allocator, response: *http.Server.Response, toke
             return try reply(response, file_name, .ok);
         }
     } else if (req.method == .GET or req.method == .HEAD) {
-        const path = try std.fmt.allocPrint(allocator, "uploads/{s}", .{cleanPath(req.target)});
+        const path = try fmt.allocPrint(allocator, "uploads/{s}", .{cleanPath(req.target)});
         defer allocator.free(path);
 
         const file = fs.cwd().openFile(path, .{}) catch |err| {
@@ -157,9 +158,12 @@ pub fn handleRequest(allocator: Allocator, response: *http.Server.Response, toke
 fn home(response: *http.Server.Response) !void {
     const html =
         \\  <!DOCTYPE html>
-        \\  <html>
+        \\  <html lang="en">
         \\  <head>
         \\      <title>~april</title>
+        \\
+        \\      <meta charset="utf-8" />
+        \\      <meta name="viewport" content="width=device-width, initial-scale=1.0" />
         \\
         \\      <link rel="preconnect" href="https://fonts.googleapis.com">
         \\      <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -193,7 +197,7 @@ fn home(response: *http.Server.Response) !void {
         \\              color: #d8d0d5;
         \\              border: solid 1px #d8d0d5;
         \\              border-radius: 8px;
-        \\              padding: 0.3em 1em 0.3em 1em;
+        \\              padding: 0.3em 1em;
         \\          }
         \\      </style>
         \\  </head>
