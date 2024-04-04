@@ -1,0 +1,16 @@
+services:
+    april:
+        build: .
+        restart: unless-stopped
+        ports:
+            - "6486:6486"
+        volumes:
+            - aprilcdn:/app/uploads
+        networks:
+            - april
+
+volumes:
+    aprilcdn:
+
+networks:
+    april:

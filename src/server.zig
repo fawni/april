@@ -14,7 +14,7 @@ const Allocator = mem.Allocator;
 const string = []const u8;
 
 const Options = struct {
-    address: string,
+    host: string,
     port: u16,
     token: string,
     allocator: Allocator,
@@ -24,7 +24,7 @@ pub fn run(options: Options) !void {
     var server = http.Server.init(options.allocator, .{ .reuse_address = true });
     defer server.deinit();
 
-    const address = try net.Address.parseIp(options.address, options.port);
+    const address = try net.Address.parseIp(options.host, options.port);
     try server.listen(address);
     while (true) {
         var response = try server.accept(.{

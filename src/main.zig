@@ -16,8 +16,8 @@ pub fn main() !void {
 
     const cfg = try config.read(allocator);
 
-    log.info("Server is running at {s}:\x1b[1;36m{d}\x1b[0m", .{ cfg.address, cfg.port });
-    server.run(.{ .address = cfg.address, .port = cfg.port, .token = cfg.token, .allocator = allocator }) catch |err| {
+    log.info("Server is running at {s}:\x1b[1;36m{d}\x1b[0m", .{ cfg.host, cfg.port });
+    server.run(.{ .host = cfg.host, .port = cfg.port, .token = cfg.token, .allocator = allocator }) catch |err| {
         log.err("server error: {}\n", .{err});
         if (@errorReturnTrace()) |trace| {
             std.debug.dumpStackTrace(trace.*);

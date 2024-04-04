@@ -23,7 +23,7 @@ _default:
 # build april and install to ~/.local/bin
 [unix]
 @install: (build)
-    cp -f ./zig-out/bin/april ~/.local/bin
+    cp -u ./zig-out/bin/april ~/.local/bin
 
 push:
     git push
