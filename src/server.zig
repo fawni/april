@@ -113,6 +113,9 @@ pub fn handleRequest(allocator: Allocator, response: *http.Server.Response, toke
             return try reply(response, file_name, .ok);
         }
     } else if (req.method == .GET or req.method == .HEAD) {
+        if (mem.eql(u8, req.target, "/health")) {
+            return try reply(response, "poke :3", .ok);
+        }
         const path = try fmt.allocPrint(allocator, "uploads/{s}", .{cleanPath(req.target)});
         defer allocator.free(path);
 
