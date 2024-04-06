@@ -114,7 +114,7 @@ pub fn handleRequest(allocator: Allocator, response: *http.Server.Response, toke
         }
     } else if (req.method == .GET or req.method == .HEAD) {
         if (mem.eql(u8, req.target, "/health")) {
-            return try reply(response, "poke :3", .ok);
+            return try reply(response, "💚", .ok);
         }
         const path = try fmt.allocPrint(allocator, "uploads/{s}", .{cleanPath(req.target)});
         defer allocator.free(path);
@@ -251,7 +251,7 @@ fn home(response: *http.Server.Response) !void {
 }
 
 fn reply(response: *http.Server.Response, msg: string, status: http.Status) !void {
-    try send(response, msg, status, "text/plain");
+    try send(response, msg, status, "text/plain; charset=utf-8");
 }
 
 fn send(response: *http.Server.Response, msg: string, status: http.Status, content_type: string) !void {
