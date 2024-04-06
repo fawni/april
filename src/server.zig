@@ -183,7 +183,7 @@ fn home(response: *http.Server.Response) !void {
         \\              font-size: 11pt;
         \\              line-height: 1.65em;
         \\              max-width: 38em;
-        \\              padding-top: 3em;
+        \\              padding: 3em 4em;
         \\              margin: auto;
         \\          }
         \\
