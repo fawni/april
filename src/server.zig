@@ -116,6 +116,7 @@ pub fn handleRequest(allocator: Allocator, response: *http.Server.Response, toke
         if (mem.eql(u8, req.target, "/health")) {
             return try reply(response, "💚", .ok);
         }
+
         const path = try fmt.allocPrint(allocator, "uploads/{s}", .{cleanPath(req.target)});
         defer allocator.free(path);
 
