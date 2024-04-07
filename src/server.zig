@@ -164,6 +164,8 @@ fn home(response: *http.Server.Response) !void {
         \\  <html lang="en">
         \\  <head>
         \\      <title>~april</title>
+        \\      <meta property="description" content="pomf clone" />
+        \\      <meta name="theme-color" content="#d895ee" />
         \\
         \\      <meta charset="utf-8" />
         \\      <meta name="viewport" content="width=device-width, initial-scale=1.0" />
